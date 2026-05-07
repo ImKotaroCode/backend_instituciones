@@ -1,0 +1,10 @@
+package backend_instituciones.backend_instituciones.repository;
+
+import backend_instituciones.backend_instituciones.domain.entity.DirectorProfile;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface DirectorProfileRepository extends JpaRepository<DirectorProfile, Long> {
+    Optional<DirectorProfile> findByUserId(Long userId);
+}

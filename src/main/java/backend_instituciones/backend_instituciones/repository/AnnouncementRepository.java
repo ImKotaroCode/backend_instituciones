@@ -1,0 +1,13 @@
+package backend_instituciones.backend_instituciones.repository;
+
+import backend_instituciones.backend_instituciones.domain.entity.Announcement;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface AnnouncementRepository extends JpaRepository<Announcement, Long> {
+    Page<Announcement> findByInstitutionIdOrderByCreatedAtDesc(Long institutionId, Pageable pageable);
+    Optional<Announcement> findByIdAndInstitutionId(Long id, Long institutionId);
+}
