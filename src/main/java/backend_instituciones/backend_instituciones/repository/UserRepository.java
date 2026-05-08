@@ -19,6 +19,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByInstitutionIdAndRole(Long institutionId, Role role);
     Optional<User> findByDocumentNumberAndInstitutionId(String documentNumber, Long institutionId);
     List<User> findByInstitutionIdAndRole(Long institutionId, Role role);
+    Optional<User> findBySupabaseUid(String supabaseUid);
 
     @Query("SELECT u FROM User u WHERE u.institutionId = :institutionId " +
            "AND (:role IS NULL OR u.role = :role) " +

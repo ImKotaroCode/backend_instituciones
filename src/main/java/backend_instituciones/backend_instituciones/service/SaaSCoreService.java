@@ -1,13 +1,16 @@
 package backend_instituciones.backend_instituciones.service;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,6 +61,34 @@ public class SaaSCoreService {
         }
     }
 
+    /**
+     * Validates an institution's apiKey against Backend Central.
+     * Returns institution data (id, nombre, estado) or throws if invalid/inactive.
+     */
+    public LicenciaResponse validateApiKey(String apiKey) {
+        try {
+            LicenciaResponse response = restClient.get()
+                    .uri("/api/licencia/validar/{apiKey}", apiKey)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (req, res) -> {
+                        throw new RuntimeException("Invalid apiKey: HTTP " + res.getStatusCode());
+                    })
+                    .body(LicenciaResponse.class);
+
+            if (response == null) {
+                throw new RuntimeException("Empty response from Central");
+            }
+            if (!"ACTIVO".equalsIgnoreCase(response.getEstado())) {
+                throw new RuntimeException("Institution not active: " + response.getEstado());
+            }
+            return response;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Central unreachable: " + e.getMessage(), e);
+        }
+    }
+
     private boolean isCircuitOpen() {
         if (failureCount.get() >= FAILURE_THRESHOLD) {
             long elapsed = System.currentTimeMillis() - lastFailureTime.get();
@@ -65,5 +96,20 @@ public class SaaSCoreService {
             failureCount.set(0);
         }
         return false;
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class LicenciaResponse {
+        @JsonProperty("id")
+        private Long id;
+        @JsonProperty("nombre")
+        private String nombre;
+        @JsonProperty("estado")
+        private String estado;
+        @JsonProperty("apiKey")
+        private String apiKey;
+        @JsonProperty("backendUrl")
+        private String backendUrl;
     }
 }

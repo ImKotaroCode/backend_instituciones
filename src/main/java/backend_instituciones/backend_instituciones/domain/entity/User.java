@@ -35,8 +35,11 @@ public class User {
     @Column(nullable = false, length = 200)
     private String email;
 
-    @Column(name = "password_hash", nullable = false)
+    @Column(name = "password_hash")
     private String passwordHash;
+
+    @Column(name = "supabase_uid", unique = true, length = 36)
+    private String supabaseUid;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

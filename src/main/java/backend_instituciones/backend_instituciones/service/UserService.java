@@ -26,6 +26,7 @@ public class UserService {
     private final UserActivityLogRepository activityLogRepository;
     private final PasswordEncoder passwordEncoder;
     private final SupabaseStorageService storageService;
+    private final SupabaseAdminService supabaseAdminService;
     private final StudentProfileRepository studentProfileRepository;
     private final TeacherProfileRepository teacherProfileRepository;
     private final DirectorProfileRepository directorProfileRepository;
@@ -84,15 +85,30 @@ public class UserService {
 
     @Transactional
     public UserResponse create(Long institutionId, CreateUserRequest request) {
-        if (userRepository.existsByEmailAndInstitutionId(request.getEmail().toLowerCase(), institutionId)) {
+        String email = request.getEmail().toLowerCase().trim();
+
+        if (userRepository.existsByEmailAndInstitutionId(email, institutionId)) {
             throw new BusinessException("Email already in use", HttpStatus.CONFLICT, "EMAIL_TAKEN");
+        }
+
+        // Create user in Supabase Auth — get UUID back
+        String supabaseUid = null;
+        try {
+            supabaseUid = supabaseAdminService.createAuthUser(email, request.getPassword());
+        } catch (Exception e) {
+            throw new BusinessException(
+                "Failed to create auth user: " + e.getMessage(),
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "SUPABASE_ERROR"
+            );
         }
 
         User user = User.builder()
                 .institutionId(institutionId)
                 .name(request.getName())
-                .email(request.getEmail().toLowerCase().trim())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .supabaseUid(supabaseUid)
                 .role(request.getRole())
                 .isActive(true)
                 .mustCompleteProfile(true)

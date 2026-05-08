@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./mvnw compile *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\61046641\\\\Documents\\\\NEWNEWNEWNENW\\\\membresia_backend\\\\backend_instituciones\\\\src\\\\main\\\\java\\\\backend_instituciones\\\\backend_instituciones\\\\security\" -Filter \"*WebSocket*\" -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

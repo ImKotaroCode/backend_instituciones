@@ -1,7 +1,10 @@
 package backend_instituciones.backend_instituciones.service;
 
-import backend_instituciones.backend_instituciones.security.JwtService;
+import backend_instituciones.backend_instituciones.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -11,15 +14,13 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
+@RequiredArgsConstructor
 @Slf4j
 public class SseService {
 
-    private final JwtService jwtService;
+    private final JwtDecoder jwtDecoder;
+    private final UserRepository userRepository;
     private final Map<String, SseEmitter> emitters = new ConcurrentHashMap<>();
-
-    public SseService(JwtService jwtService) {
-        this.jwtService = jwtService;
-    }
 
     public SseEmitter subscribe(String userId) {
         SseEmitter emitter = new SseEmitter(300_000L);
@@ -78,11 +79,29 @@ public class SseService {
             }
         });
     }
+
+    /**
+     * Extracts the internal DB user ID (Long) from a Supabase JWT.
+     * Looks up user by supabase_uid (JWT subject) and returns the DB id as String.
+     * Returns null if token invalid or user not found.
+     */
     public String extractUserId(String token) {
-        return jwtService.extractUserId(token);
+        try {
+            String supabaseUid = jwtDecoder.decode(token).getSubject();
+            return userRepository.findBySupabaseUid(supabaseUid)
+                    .map(u -> u.getId().toString())
+                    .orElse(null);
+        } catch (JwtException e) {
+            return null;
+        }
     }
 
     public boolean isValid(String token) {
-        return jwtService.isValid(token);
+        try {
+            jwtDecoder.decode(token);
+            return true;
+        } catch (JwtException e) {
+            return false;
+        }
     }
 }

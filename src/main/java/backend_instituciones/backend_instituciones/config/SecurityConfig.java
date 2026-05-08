@@ -1,12 +1,13 @@
 package backend_instituciones.backend_instituciones.config;
 
-import backend_instituciones.backend_instituciones.security.JwtAuthFilter;
+import backend_instituciones.backend_instituciones.security.SupabaseAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -15,7 +16,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -30,47 +31,48 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthFilter jwtAuthFilter;
+    private final SupabaseAuthFilter supabaseAuthFilter;
 
     @Value("${app.frontend-url:http://localhost:5173}")
     private String frontendUrl;
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) {
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(c -> c.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/v1/public/**",
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/refresh",
-                                "/api/v1/sse/**",
-                                "/api/ws/**",
-                                "/actuator/health",
-                                "/actuator/info",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**"
-                        ).permitAll()
-                        .requestMatchers("/api/v1/provider/**").hasRole("PROVEEDOR")
-                        .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/reports/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/announcements/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/grade-levels/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
-                        .requestMatchers("/api/v1/sections/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
-                        .requestMatchers("/api/v1/classrooms/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
-                        .requestMatchers("/api/v1/course-assignments/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/course-catalog/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
-                        .requestMatchers("/api/v1/academic-structure/**").authenticated()
-                        .requestMatchers("/api/v1/imports/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/students/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/guardians/**").hasAnyRole("ADMIN", "DIRECTOR", "PADRE")
-                        .requestMatchers("/api/v1/enrollments/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/academic-years/**").hasAnyRole("ADMIN", "DIRECTOR")
-                        .requestMatchers("/api/v1/profile/**").authenticated()
-                        .anyRequest().authenticated()
-                )
+            .authorizeHttpRequests(auth -> auth
+                    .requestMatchers(
+                            "/api/v1/public/**",
+                            "/api/v1/sse/**",
+                            "/api/ws/**",
+                            "/api/internal/**",
+                            "/actuator/health",
+                            "/actuator/info",
+                            "/swagger-ui/**",
+                            "/v3/api-docs/**"
+                    ).permitAll()
+                    .requestMatchers("/api/v1/provider/**").hasRole("PROVEEDOR")
+                    .requestMatchers("/api/v1/users/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/v1/reports/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/announcements/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/grade-levels/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
+                    .requestMatchers("/api/v1/sections/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
+                    .requestMatchers("/api/v1/classrooms/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
+                    .requestMatchers("/api/v1/course-assignments/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/course-catalog/**").hasAnyRole("ADMIN", "DIRECTOR", "DOCENTE")
+                    .requestMatchers("/api/v1/academic-structure/**").authenticated()
+                    .requestMatchers("/api/v1/imports/**").hasRole("ADMIN")
+                    .requestMatchers("/api/v1/students/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/guardians/**").hasAnyRole("ADMIN", "DIRECTOR", "PADRE")
+                    .requestMatchers("/api/v1/enrollments/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/academic-years/**").hasAnyRole("ADMIN", "DIRECTOR")
+                    .requestMatchers("/api/v1/profile/**").authenticated()
+                    .requestMatchers("/api/v1/auth/me").authenticated()
+                    .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth -> oauth.jwt(Customizer.withDefaults()))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {
                     res.setStatus(401);
@@ -88,7 +90,10 @@ public class SecurityConfig {
                         req.getRequestURI() + "\",\"timestamp\":\"" + Instant.now() + "\"}");
                 })
             )
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            // SupabaseAuthFilter runs before AuthorizationFilter but after JWT validation:
+            // BearerTokenAuthenticationFilter already set JwtAuthenticationToken in SecurityContext
+            // → load user from DB → set TenantContext + DB roles
+            .addFilterBefore(supabaseAuthFilter, AuthorizationFilter.class);
 
         return http.build();
     }
