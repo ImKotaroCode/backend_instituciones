@@ -1,6 +1,8 @@
 package backend_instituciones.backend_instituciones.service;
 
 import backend_instituciones.backend_instituciones.exception.BusinessException;
+import com.sksamuel.scrimage.ImmutableImage;
+import com.sksamuel.scrimage.webp.WebpWriter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -10,6 +12,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -31,18 +34,43 @@ public class SupabaseStorageService {
         this.restClient = RestClient.create();
     }
 
+    private static final Set<String> IMAGE_MIME_TYPES = Set.of(
+            "image/jpeg", "image/jpg", "image/png", "image/gif",
+            "image/bmp", "image/tiff", "image/svg+xml", "image/heic", "image/heif"
+    );
+
     public String upload(MultipartFile file, String folder) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("File is required", HttpStatus.BAD_REQUEST, "FILE_REQUIRED");
         }
 
-        String ext = getExtension(file.getOriginalFilename());
-        String path = folder + "/" + UUID.randomUUID() + ext;
-        String uploadUrl = apiUrl + "/storage/v1/object/" + bucket + "/" + path;
-
         try {
             byte[] bytes = file.getBytes();
-            MediaType contentType = resolveContentType(file.getContentType());
+            String mime = file.getContentType();
+            String ext;
+            MediaType contentType;
+
+            // Convert images to WebP (skip if already webp or non-raster like svg)
+            if (mime != null && IMAGE_MIME_TYPES.contains(mime.toLowerCase())) {
+                try {
+                    bytes = ImmutableImage.loader().fromBytes(bytes)
+                            .bytes(WebpWriter.DEFAULT);
+                    mime = "image/webp";
+                    ext = ".webp";
+                    contentType = MediaType.parseMediaType("image/webp");
+                    log.debug("Image converted to WebP");
+                } catch (Exception convEx) {
+                    log.warn("WebP conversion failed, uploading original: {}", convEx.getMessage());
+                    ext = getExtension(file.getOriginalFilename());
+                    contentType = resolveContentType(file.getContentType());
+                }
+            } else {
+                ext = getExtension(file.getOriginalFilename());
+                contentType = resolveContentType(file.getContentType());
+            }
+
+            String path = folder + "/" + UUID.randomUUID() + ext;
+            String uploadUrl = apiUrl + "/storage/v1/object/" + bucket + "/" + path;
 
             restClient.put()
                     .uri(uploadUrl)

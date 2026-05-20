@@ -15,8 +15,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +28,7 @@ public class AcademicStructureService {
     private final AcademicGradeRepository gradeRepository;
     private final AcademicSectionRepository sectionRepository;
 
+    @Transactional(readOnly = true)
     public AcademicStructureResponse getStructure(Long institutionId) {
         List<AcademicLevel> levels = levelRepository.findByInstitutionIdOrderBySortOrderAscNameAsc(institutionId);
         return toResponse(institutionId, levels);
@@ -293,18 +296,41 @@ public class AcademicStructureService {
     }
 
     private AcademicStructureResponse toResponse(Long institutionId, List<AcademicLevel> levels) {
-        List<AcademicStructureResponse.LevelResponse> levelResponses = levels.stream().map(l -> {
-            List<AcademicGrade> grades = gradeRepository.findByLevelIdOrderBySortOrderAscNameAsc(l.getId());
-            return toLevelResponse(l, grades);
-        }).toList();
+        if (levels.isEmpty()) return AcademicStructureResponse.builder().levels(List.of()).build();
+
+        List<Long> levelIds = levels.stream().map(AcademicLevel::getId).toList();
+        List<AcademicGrade> allGrades = gradeRepository.findByLevelIdInOrderBySortOrderAscNameAsc(levelIds);
+        Map<Long, List<AcademicGrade>> gradesByLevel = allGrades.stream()
+                .collect(Collectors.groupingBy(AcademicGrade::getLevelId));
+
+        List<Long> gradeIds = allGrades.stream().map(AcademicGrade::getId).toList();
+        Map<Long, List<AcademicSection>> sectionsByGrade = gradeIds.isEmpty() ? Map.of()
+                : sectionRepository.findByGradeIdIn(gradeIds).stream()
+                        .sorted(Comparator.comparing(AcademicSection::getSortOrder,
+                                        Comparator.nullsLast(Comparator.naturalOrder()))
+                                .thenComparing(AcademicSection::getName))
+                        .collect(Collectors.groupingBy(AcademicSection::getGradeId));
+
+        List<AcademicStructureResponse.LevelResponse> levelResponses = levels.stream()
+                .map(l -> toLevelResponse(l,
+                        gradesByLevel.getOrDefault(l.getId(), List.of()),
+                        sectionsByGrade))
+                .toList();
         return AcademicStructureResponse.builder().levels(levelResponses).build();
     }
 
     private AcademicStructureResponse.LevelResponse toLevelResponse(AcademicLevel l, List<AcademicGrade> grades) {
-        List<AcademicStructureResponse.GradeResponse> gradeResponses = grades.stream().map(g -> {
-            List<AcademicSection> sections = sectionRepository.findByGradeIdOrderBySortOrderAscNameAsc(g.getId());
-            return toGradeResponse(g, sections);
-        }).toList();
+        Map<Long, List<AcademicSection>> sectionsMap = grades.isEmpty() ? Map.of()
+                : sectionRepository.findByGradeIdIn(grades.stream().map(AcademicGrade::getId).toList()).stream()
+                        .collect(Collectors.groupingBy(AcademicSection::getGradeId));
+        return toLevelResponse(l, grades, sectionsMap);
+    }
+
+    private AcademicStructureResponse.LevelResponse toLevelResponse(AcademicLevel l, List<AcademicGrade> grades,
+                                                                      Map<Long, List<AcademicSection>> sectionsByGrade) {
+        List<AcademicStructureResponse.GradeResponse> gradeResponses = grades.stream()
+                .map(g -> toGradeResponse(g, sectionsByGrade.getOrDefault(g.getId(), List.of())))
+                .toList();
         return AcademicStructureResponse.LevelResponse.builder()
                 .id(l.getId()).name(l.getName()).code(l.getCode())
                 .sortOrder(l.getSortOrder()).status(l.getStatus())

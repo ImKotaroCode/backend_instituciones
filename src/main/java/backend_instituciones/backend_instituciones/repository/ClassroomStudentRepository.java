@@ -12,4 +12,6 @@ public interface ClassroomStudentRepository extends JpaRepository<ClassroomStude
     boolean existsByClassroomIdAndStudentId(Long classroomId, Long studentId);
     void deleteByClassroomIdAndStudentId(Long classroomId, Long studentId);
     List<ClassroomStudent> findByStudentIdAndInstitutionId(Long studentId, Long institutionId);
+
+    long countByClassroomId(Long classroomId);
 }

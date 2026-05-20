@@ -13,10 +13,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -32,13 +37,16 @@ public class UserService {
     private final DirectorProfileRepository directorProfileRepository;
     private final GuardianProfileRepository guardianProfileRepository;
     private final AdminProfileRepository adminProfileRepository;
+    private final UserRelationsService userRelationsService;
 
+    @Transactional(readOnly = true)
     public PageResponse<UserResponse> list(Long institutionId, int page, int size) {
         var pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return PageResponse.from(userRepository.findByInstitutionId(institutionId, pageable)
                 .map(this::toResponse));
     }
 
+    @Transactional(readOnly = true)
     public PageResponse<UserResponse> search(Long institutionId, Role role, Boolean active,
                                              String q, String documentNumber, Long classroomId,
                                              int page, int size) {
@@ -79,6 +87,7 @@ public class UserService {
         return toResponse(userRepository.save(user));
     }
 
+    @Transactional(readOnly = true)
     public UserResponse get(Long id, Long institutionId) {
         return toResponse(findOrThrow(id, institutionId));
     }
@@ -91,16 +100,40 @@ public class UserService {
             throw new BusinessException("Email already in use", HttpStatus.CONFLICT, "EMAIL_TAKEN");
         }
 
+        // ADMINISTRACION solo puede crear DOCENTE, ESTUDIANTE, ALMACEN
+        if (callerHasRole("ROLE_ADMINISTRACION")) {
+            Set<Role> allowed = Set.of(Role.DOCENTE, Role.ESTUDIANTE, Role.ALMACEN);
+            if (!allowed.contains(request.getRole())) {
+                throw new BusinessException("Este rol no puede crear usuarios de ese tipo",
+                        HttpStatus.FORBIDDEN, "FORBIDDEN");
+            }
+        }
+
         // Create user in Supabase Auth — get UUID back
+        // Same email can exist in another institution: reuse their supabase_uid (Supabase Auth is global)
         String supabaseUid = null;
         try {
             supabaseUid = supabaseAdminService.createAuthUser(email, request.getPassword());
         } catch (Exception e) {
-            throw new BusinessException(
-                "Failed to create auth user: " + e.getMessage(),
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "SUPABASE_ERROR"
-            );
+            if ("EMAIL_ALREADY_REGISTERED".equals(e.getMessage())) {
+                // Reuse existing supabase_uid from another institution
+                supabaseUid = userRepository.findFirstByEmail(email)
+                        .map(User::getSupabaseUid)
+                        .orElse(null);
+                if (supabaseUid == null) {
+                    // Email exists in Supabase but not in our DB at all — can't recover
+                    throw new BusinessException(
+                        "El correo ya está registrado en Supabase pero no en el sistema. Contacta soporte.",
+                        HttpStatus.CONFLICT, "EMAIL_TAKEN_EXTERNAL");
+                }
+                // supabaseUid found — continue normally, same person joining another institution
+            } else {
+                throw new BusinessException(
+                    "Failed to create auth user: " + e.getMessage(),
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "SUPABASE_ERROR"
+                );
+            }
         }
 
         User user = User.builder()
@@ -111,23 +144,54 @@ public class UserService {
                 .supabaseUid(supabaseUid)
                 .role(request.getRole())
                 .isActive(true)
-                .mustCompleteProfile(true)
+                .mustCompleteProfile(false)
                 .mustChangePassword(true)
+                .phone(blankToNull(request.getPhone()))
+                .alternativePhone(blankToNull(request.getAlternativePhone()))
+                .documentType(blankToNull(request.getDocumentType()))
+                .documentNumber(blankToNull(request.getDocumentNumber()))
+                .birthDate(request.getBirthDate())
+                .gender(blankToNull(request.getGender()))
+                .address(blankToNull(request.getAddress()))
+                .district(blankToNull(request.getDistrict()))
+                .city(blankToNull(request.getCity()))
                 .build();
 
         user = userRepository.save(user);
-        createEmptyProfile(user);
+        createProfileWithData(user, request);
+
+        if (request.getRole() == Role.ESTUDIANTE) {
+            userRelationsService.autoAssignSectionIfPresent(user.getId(), institutionId,
+                    request.getLevelId(), request.getGradeId(), request.getSectionId());
+        } else if (request.getRole() == Role.PADRE) {
+            userRelationsService.autoLinkStudentsIfPresent(user.getId(), institutionId,
+                    request.getLinkedStudentIds());
+        }
+
         return toResponse(user);
     }
 
     @Transactional
     public UserResponse update(Long id, Long institutionId, UpdateUserRequest request) {
         User user = findOrThrow(id, institutionId);
-        user.setName(request.getName());
+        if (request.getName() != null && !request.getName().isBlank()) {
+            user.setName(request.getName());
+        }
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         }
-        return toResponse(userRepository.save(user));
+        userRepository.save(user);
+
+        // Persist adminPermissions for ADMINISTRACION (normalize before write)
+        if (request.getAdminPermissions() != null && user.getRole() == Role.ADMINISTRACION) {
+            Map<String, Map<String, Boolean>> normalized = normalizeAdminPermissions(request.getAdminPermissions());
+            adminProfileRepository.findByUserId(id).ifPresent(p -> {
+                p.setAdminPermissions(normalized);
+                adminProfileRepository.save(p);
+            });
+        }
+
+        return toResponse(user);
     }
 
     @Transactional
@@ -254,8 +318,42 @@ public class UserService {
                     b.employeeCode(p.getEmployeeCode())
                      .hireDate(p.getHireDate())
                      .position(p.getPosition()));
+            case ALMACEN -> adminProfileRepository.findByUserId(u.getId()).ifPresent(p ->
+                    b.employeeCode(p.getEmployeeCode())
+                     .hireDate(p.getHireDate())
+                     .position(p.getPosition()));
+            case ADMINISTRACION -> adminProfileRepository.findByUserId(u.getId()).ifPresent(p ->
+                    b.employeeCode(p.getEmployeeCode())
+                     .hireDate(p.getHireDate())
+                     .position(p.getPosition())
+                     .adminPermissions(normalizeAdminPermissions(p.getAdminPermissions())));
             default -> {}
         }
+    }
+
+    private static final List<String> ADMIN_MODULES =
+            List.of("USUARIOS", "ESTRUCTURA", "PAGOS", "ANUNCIOS", "ASISTENCIA", "ALMACEN");
+
+    private Map<String, Map<String, Boolean>> normalizeAdminPermissions(
+            Map<String, Map<String, Boolean>> raw) {
+        Map<String, Map<String, Boolean>> result = new java.util.LinkedHashMap<>();
+        for (String module : ADMIN_MODULES) {
+            boolean access = false;
+            if (raw != null) {
+                Map<String, Boolean> modulePerms = raw.get(module);
+                if (modulePerms != null) {
+                    // prefer explicit 'access', fall back to legacy 'view' or 'manage'
+                    if (modulePerms.containsKey("access")) {
+                        access = Boolean.TRUE.equals(modulePerms.get("access"));
+                    } else if (Boolean.TRUE.equals(modulePerms.get("view"))
+                            || Boolean.TRUE.equals(modulePerms.get("manage"))) {
+                        access = true;
+                    }
+                }
+            }
+            result.put(module, Map.of("access", access));
+        }
+        return result;
     }
 
     private void createEmptyProfile(User user) {
@@ -266,6 +364,51 @@ public class UserService {
             case DIRECTOR -> directorProfileRepository.save(DirectorProfile.builder().userId(user.getId()).build());
             case PADRE -> guardianProfileRepository.save(GuardianProfile.builder().userId(user.getId()).build());
             case ADMIN -> adminProfileRepository.save(AdminProfile.builder().userId(user.getId()).build());
+            case ALMACEN -> adminProfileRepository.save(AdminProfile.builder().userId(user.getId()).build());
+            case ADMINISTRACION -> adminProfileRepository.save(AdminProfile.builder().userId(user.getId()).build());
+            default -> {}
+        }
+    }
+
+    private void createProfileWithData(User user, CreateUserRequest request) {
+        if (user.getRole() == null || user.getId() == null) return;
+        switch (user.getRole()) {
+            case ESTUDIANTE -> studentProfileRepository.save(StudentProfile.builder()
+                    .userId(user.getId())
+                    .admissionDate(request.getAdmissionDate())
+                    .bloodType(blankToNull(request.getBloodType()))
+                    .allergies(blankToNull(request.getAllergies()))
+                    .medicalNotes(blankToNull(request.getMedicalNotes()))
+                    .specialNeeds(blankToNull(request.getSpecialNeeds()))
+                    .emergencyPhone(blankToNull(request.getEmergencyPhone()))
+                    .build());
+            case DOCENTE -> teacherProfileRepository.save(TeacherProfile.builder()
+                    .userId(user.getId())
+                    .specialty(blankToNull(request.getSpecialty()))
+                    .hireDate(request.getHireDate())
+                    .professionalLicense(blankToNull(request.getProfessionalLicense()))
+                    .build());
+            case DIRECTOR -> directorProfileRepository.save(DirectorProfile.builder()
+                    .userId(user.getId())
+                    .hireDate(request.getHireDate())
+                    .position(blankToNull(request.getPosition()))
+                    .build());
+            case PADRE -> guardianProfileRepository.save(GuardianProfile.builder()
+                    .userId(user.getId())
+                    .occupation(blankToNull(request.getOccupation()))
+                    .workplace(blankToNull(request.getWorkplace()))
+                    .billingEmail(blankToNull(request.getBillingEmail()))
+                    .build());
+            case ADMIN -> adminProfileRepository.save(AdminProfile.builder().userId(user.getId()).build());
+            case ALMACEN -> adminProfileRepository.save(AdminProfile.builder()
+                    .userId(user.getId())
+                    .hireDate(request.getHireDate())
+                    .position(blankToNull(request.getPosition()))
+                    .build());
+            case ADMINISTRACION -> adminProfileRepository.save(AdminProfile.builder()
+                    .userId(user.getId())
+                    .adminPermissions(normalizeAdminPermissions(request.getAdminPermissions()))
+                    .build());
             default -> {}
         }
     }
@@ -278,7 +421,19 @@ public class UserService {
             case DIRECTOR -> directorProfileRepository.deleteById(user.getId());
             case PADRE -> guardianProfileRepository.deleteById(user.getId());
             case ADMIN -> adminProfileRepository.deleteById(user.getId());
+            case ALMACEN -> adminProfileRepository.deleteById(user.getId());
+            case ADMINISTRACION -> adminProfileRepository.deleteById(user.getId());
             default -> {}
         }
+    }
+
+    private boolean callerHasRole(String role) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return false;
+        return auth.getAuthorities().stream().anyMatch(a -> role.equals(a.getAuthority()));
+    }
+
+    private String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 }

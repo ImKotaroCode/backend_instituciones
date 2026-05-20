@@ -32,12 +32,14 @@ public class EnrollmentService {
     private final ClassroomRepository classroomRepository;
     private final UserRepository userRepository;
 
+    @Transactional(readOnly = true)
     public PageResponse<EnrollmentResponse> list(Long institutionId, int page, int size) {
         var pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
         return PageResponse.from(enrollmentRepository.findByInstitutionId(institutionId, pageable)
                 .map(this::toResponse));
     }
 
+    @Transactional(readOnly = true)
     public EnrollmentResponse get(Long id, Long institutionId) {
         return toResponse(findOrThrow(id, institutionId));
     }
@@ -85,6 +87,7 @@ public class EnrollmentService {
         enrollmentRepository.delete(entity);
     }
 
+    @Transactional(readOnly = true)
     public List<AcademicStatusResponse> getAcademicHistory(Long studentId, Long institutionId) {
         return statusRepository.findByStudentIdAndInstitutionIdOrderByAcademicYearIdDesc(studentId, institutionId)
                 .stream().map(this::toStatusResponse).toList();

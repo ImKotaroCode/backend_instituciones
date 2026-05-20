@@ -17,4 +17,8 @@ public interface CourseAssignmentRepository extends JpaRepository<CourseAssignme
     boolean existsByClassroomIdAndCourseId(Long classroomId, Long courseId);
     boolean existsByGeneratedCode(String generatedCode);
     List<CourseAssignment> findByClassroomIdInAndInstitutionId(List<Long> classroomIds, Long institutionId);
+
+    List<CourseAssignment> findByTeacherIdAndInstitutionId(Long teacherId, Long institutionId);
+    List<CourseAssignment> findByCourseIdAndInstitutionId(Long courseId, Long institutionId);
+    long countByInstitutionId(Long institutionId);
 }

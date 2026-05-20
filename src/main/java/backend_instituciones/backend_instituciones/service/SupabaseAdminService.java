@@ -44,7 +44,14 @@ public class SupabaseAdminService {
                 ))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, (req, res) -> {
-                    throw new RuntimeException("Supabase Admin API error: HTTP " + res.getStatusCode());
+                    String body = new String(res.getBody().readAllBytes());
+                    log.error("Supabase Admin API error: HTTP {} — {}", res.getStatusCode(), body);
+                    String bodyLower = body.toLowerCase();
+                    if (bodyLower.contains("already registered") || bodyLower.contains("already been registered")
+                            || bodyLower.contains("duplicate") || bodyLower.contains("already exists")) {
+                        throw new RuntimeException("EMAIL_ALREADY_REGISTERED");
+                    }
+                    throw new RuntimeException("Supabase Admin API error: HTTP " + res.getStatusCode() + " " + body);
                 })
                 .body(SupabaseUserResponse.class);
 

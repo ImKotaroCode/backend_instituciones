@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/course-catalog")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'DOCENTE')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'DOCENTE','ADMINISTRACION')")
 public class CourseCatalogController {
 
     private final CourseService courseService;
@@ -30,20 +30,20 @@ public class CourseCatalogController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateCourseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(courseService.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CreateCourseRequest request) {
         return ResponseEntity.ok(courseService.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         courseService.delete(id, TenantContext.getInstitutionId());
         return ResponseEntity.noContent().build();

@@ -16,7 +16,7 @@ import java.io.IOException;
 @RestController
 @RequestMapping("/api/v1/imports")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
 public class ImportController {
 
     private final ImportService service;

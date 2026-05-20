@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
 public class GuardianController {
 
     private final GuardianService service;
@@ -23,7 +23,7 @@ public class GuardianController {
     }
 
     @PostMapping("/api/v1/students/{studentId}/guardians")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> addGuardian(@PathVariable Long studentId,
                                          @Valid @RequestBody GuardianRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -31,7 +31,7 @@ public class GuardianController {
     }
 
     @DeleteMapping("/api/v1/students/{studentId}/guardians/{guardianId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> removeGuardian(@PathVariable Long studentId,
                                                @PathVariable Long guardianId) {
         service.removeGuardian(studentId, guardianId, TenantContext.getInstitutionId());
@@ -44,7 +44,7 @@ public class GuardianController {
     }
 
     @PutMapping("/api/v1/guardians/{guardianId}/students/{studentId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> updateRelationship(@PathVariable Long guardianId,
                                                 @PathVariable Long studentId,
                                                 @Valid @RequestBody GuardianRequest request) {

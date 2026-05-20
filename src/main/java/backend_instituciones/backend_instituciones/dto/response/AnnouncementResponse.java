@@ -11,12 +11,21 @@ import java.util.List;
 public class AnnouncementResponse {
     private Long id;
     private Long institutionId;
+    private String kind;
     private String title;
     private String content;
+    private String linkUrl;
+    private String mediaUrl;
+    private String mediaType;
+    private String mediaName;
     private List<String> targetRoles;
     private Priority priority;
-    private LocalDateTime scheduledAt;
+    private String monthKey;
+    private String status;
     private LocalDateTime publishedAt;
+    private LocalDateTime scheduledAt;
     private LocalDateTime createdAt;
     private Long createdBy;
+    /** Populated only in inbox responses — null if not seen */
+    private LocalDateTime seenAt;
 }

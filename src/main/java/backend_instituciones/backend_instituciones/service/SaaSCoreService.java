@@ -44,12 +44,12 @@ public class SaaSCoreService {
         }
 
         try {
-            var response = restClient.get()
-                    .uri("/api/institutions/{id}", institutionId)
+            LicenciaResponse response = restClient.get()
+                    .uri("/api/licencia/validar/id/{id}", institutionId)
                     .retrieve()
-                    .body(Map.class);
+                    .body(LicenciaResponse.class);
 
-            boolean active = response != null && Boolean.TRUE.equals(response.get("active"));
+            boolean active = response != null && "ACTIVO".equalsIgnoreCase(response.getEstado());
             institutionCache.put(institutionId.toString(), active);
             failureCount.set(0);
             return active;
@@ -59,6 +59,15 @@ public class SaaSCoreService {
             lastFailureTime.set(System.currentTimeMillis());
             return institutionCache.getOrDefault(institutionId.toString(), true);
         }
+    }
+
+    public void invalidateCache(Long institutionId) {
+        institutionCache.remove(institutionId.toString());
+    }
+
+    public void updateCachedStatus(Long institutionId, boolean active) {
+        institutionCache.put(institutionId.toString(), active);
+        log.info("Institution {} status cached locally as {}", institutionId, active ? "ACTIVO" : "SUSPENDIDO");
     }
 
     /**

@@ -2,8 +2,11 @@ package backend_instituciones.backend_instituciones.controller;
 
 import backend_instituciones.backend_instituciones.domain.enums.Role;
 import backend_instituciones.backend_instituciones.dto.request.CreateUserRequest;
+import backend_instituciones.backend_instituciones.dto.request.DependentsRequest;
+import backend_instituciones.backend_instituciones.dto.request.StudentSectionRequest;
 import backend_instituciones.backend_instituciones.dto.request.UpdateUserRequest;
 import backend_instituciones.backend_instituciones.security.TenantContext;
+import backend_instituciones.backend_instituciones.service.UserRelationsService;
 import backend_instituciones.backend_instituciones.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,27 +21,39 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
 public class UserController {
 
     private final UserService userService;
+    private final UserRelationsService userRelationsService;
 
     @GetMapping
-    public ResponseEntity<?> list(@RequestParam(defaultValue = "0") int page,
+    public ResponseEntity<?> list(@RequestParam(required = false) Role role,
+                                  @RequestParam(required = false) Boolean active,
+                                  @RequestParam(name = "q", required = false) String q,
+                                  @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "20") int size) {
+        if (role != null || active != null || q != null) {
+            return ResponseEntity.ok(userService.search(
+                    TenantContext.getInstitutionId(), role, active, q, null, null, page, size));
+        }
         return ResponseEntity.ok(userService.list(TenantContext.getInstitutionId(), page, size));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'ALMACEN', 'ADMINISTRACION')")
     @GetMapping("/search")
     public ResponseEntity<?> search(@RequestParam(required = false) Role role,
                                     @RequestParam(required = false) Boolean active,
-                                    @RequestParam(required = false) String q,
+                                    @RequestParam(name = "q", required = false) String q,
+                                    @RequestParam(name = "query", required = false) String query,
                                     @RequestParam(required = false) String documentNumber,
                                     @RequestParam(required = false) Long classroomId,
                                     @RequestParam(defaultValue = "0") int page,
                                     @RequestParam(defaultValue = "20") int size) {
+        // Accept both ?q=... and ?query=... (frontend may send either)
+        String searchTerm = query != null ? query : q;
         return ResponseEntity.ok(userService.search(TenantContext.getInstitutionId(), role, active,
-                q, documentNumber, classroomId, page, size));
+                searchTerm, documentNumber, classroomId, page, size));
     }
 
     @PostMapping(value = "/{id}/photo", consumes = "multipart/form-data")
@@ -65,7 +80,7 @@ public class UserController {
 
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id,
-                                    @Valid @RequestBody UpdateUserRequest request) {
+                                    @RequestBody UpdateUserRequest request) {
         return ResponseEntity.ok(userService.update(id, TenantContext.getInstitutionId(), request));
     }
 
@@ -114,5 +129,27 @@ public class UserController {
                                       @RequestParam(defaultValue = "0") int page,
                                       @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(userService.getActivity(id, TenantContext.getInstitutionId(), page, size));
+    }
+
+    @GetMapping("/{id}/student-section")
+    public ResponseEntity<?> getStudentSection(@PathVariable Long id) {
+        return ResponseEntity.ok(userRelationsService.getStudentSection(id, TenantContext.getInstitutionId()));
+    }
+
+    @PutMapping("/{id}/student-section")
+    public ResponseEntity<?> assignStudentSection(@PathVariable Long id,
+                                                   @RequestBody StudentSectionRequest request) {
+        return ResponseEntity.ok(userRelationsService.assignStudentSection(id, TenantContext.getInstitutionId(), request));
+    }
+
+    @GetMapping("/{id}/dependents")
+    public ResponseEntity<?> getDependents(@PathVariable Long id) {
+        return ResponseEntity.ok(userRelationsService.getDependents(id, TenantContext.getInstitutionId()));
+    }
+
+    @PutMapping("/{id}/dependents")
+    public ResponseEntity<?> assignDependents(@PathVariable Long id,
+                                               @RequestBody DependentsRequest request) {
+        return ResponseEntity.ok(userRelationsService.assignDependents(id, TenantContext.getInstitutionId(), request));
     }
 }

@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/academic-years")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'PROVEEDOR','ADMINISTRACION')")
 public class AcademicYearController {
 
     private final AcademicYearService service;
@@ -29,26 +29,26 @@ public class AcademicYearController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PROVEEDOR')")
     public ResponseEntity<?> create(@Valid @RequestBody AcademicYearRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PROVEEDOR')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody AcademicYearRequest request) {
         return ResponseEntity.ok(service.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @PatchMapping("/{id}/close")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PROVEEDOR')")
     public ResponseEntity<?> close(@PathVariable Long id) {
         return ResponseEntity.ok(service.close(id, TenantContext.getInstitutionId()));
     }
 
     @PatchMapping("/{id}/open")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> open(@PathVariable Long id) {
         return ResponseEntity.ok(service.open(id, TenantContext.getInstitutionId()));
     }

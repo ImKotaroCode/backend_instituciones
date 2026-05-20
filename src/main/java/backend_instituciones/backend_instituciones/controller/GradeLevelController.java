@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/grade-levels")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
 public class GradeLevelController {
 
     private final GradeLevelService service;
@@ -29,20 +29,20 @@ public class GradeLevelController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> create(@Valid @RequestBody GradeLevelRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody GradeLevelRequest request) {
         return ResponseEntity.ok(service.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id, TenantContext.getInstitutionId());
         return ResponseEntity.noContent().build();

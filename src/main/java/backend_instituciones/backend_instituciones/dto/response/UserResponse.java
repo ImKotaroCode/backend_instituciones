@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 public class UserResponse {
@@ -53,6 +54,8 @@ public class UserResponse {
     private String workplace;
     private String alternativePhone;
     private String billingEmail;
+
+    private Map<String, Map<String, Boolean>> adminPermissions;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

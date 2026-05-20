@@ -33,28 +33,28 @@ public class CourseController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE','ADMINISTRACION')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateCourseRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(courseService.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE','ADMINISTRACION')")
     public ResponseEntity<?> update(@PathVariable Long id,
                                     @Valid @RequestBody CreateCourseRequest request) {
         return ResponseEntity.ok(courseService.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         courseService.delete(id, TenantContext.getInstitutionId());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/enroll")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> enroll(@PathVariable Long id,
                                        @Valid @RequestBody EnrollRequest request) {
         courseService.enroll(id, TenantContext.getInstitutionId(), request);
@@ -62,7 +62,7 @@ public class CourseController {
     }
 
     @DeleteMapping("/{id}/enroll/{studentId}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> unenroll(@PathVariable Long id, @PathVariable Long studentId) {
         courseService.unenroll(id, TenantContext.getInstitutionId(), studentId);
         return ResponseEntity.noContent().build();
@@ -79,7 +79,7 @@ public class CourseController {
     }
 
     @PostMapping("/{id}/materials")
-    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE','ADMINISTRACION')")
     public ResponseEntity<?> addMaterial(@PathVariable Long id,
                                          @RequestBody Map<String, String> body) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -88,7 +88,7 @@ public class CourseController {
     }
 
     @DeleteMapping("/{id}/materials/{materialId}")
-    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DOCENTE','ADMINISTRACION')")
     public ResponseEntity<Void> deleteMaterial(@PathVariable Long id, @PathVariable Long materialId) {
         courseService.deleteMaterial(id, TenantContext.getInstitutionId(), materialId);
         return ResponseEntity.noContent().build();

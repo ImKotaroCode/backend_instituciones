@@ -9,6 +9,7 @@ import backend_instituciones.backend_instituciones.dto.response.CourseResponse;
 import backend_instituciones.backend_instituciones.dto.response.PageResponse;
 import backend_instituciones.backend_instituciones.exception.ResourceNotFoundException;
 import backend_instituciones.backend_instituciones.repository.CourseMaterialRepository;
+import backend_instituciones.backend_instituciones.repository.CourseAssignmentRepository;
 import backend_instituciones.backend_instituciones.repository.CourseRepository;
 import backend_instituciones.backend_instituciones.repository.EnrollmentRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.List;
 public class CourseService {
 
     private final CourseRepository courseRepository;
+    private final CourseAssignmentRepository courseAssignmentRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final CourseMaterialRepository materialRepository;
 
@@ -38,7 +40,17 @@ public class CourseService {
     }
 
     public CourseResponse get(Long id, Long institutionId) {
-        return toResponse(findOrThrow(id, institutionId));
+        return courseRepository.findByIdAndInstitutionId(id, institutionId)
+                .map(this::toResponse)
+                .orElseGet(() -> courseAssignmentRepository.findByIdAndInstitutionId(id, institutionId)
+                        .map(a -> CourseResponse.builder()
+                                .id(a.getId())
+                                .institutionId(institutionId)
+                                .name(a.getCourseName())
+                                .status(a.getStatus())
+                                .createdAt(a.getCreatedAt())
+                                .build())
+                        .orElseThrow(() -> new ResourceNotFoundException("Course", id)));
     }
 
     @Transactional
@@ -87,13 +99,13 @@ public class CourseService {
     }
 
     public List<Long> getStudents(Long courseId, Long institutionId) {
-        findOrThrow(courseId, institutionId);
+        validateCourseOrAssignment(courseId, institutionId);
         return enrollmentRepository.findByCourseId(courseId).stream()
                 .map(Enrollment::getStudentId).toList();
     }
 
     public List<CourseMaterial> getMaterials(Long courseId, Long institutionId) {
-        findOrThrow(courseId, institutionId);
+        validateCourseOrAssignment(courseId, institutionId);
         return materialRepository.findByCourseId(courseId);
     }
 
@@ -117,6 +129,13 @@ public class CourseService {
     public Course findOrThrow(Long id, Long institutionId) {
         return courseRepository.findByIdAndInstitutionId(id, institutionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Course", id));
+    }
+
+    /** Validates that id belongs to either courses or course_assignments for this institution. */
+    private void validateCourseOrAssignment(Long id, Long institutionId) {
+        boolean exists = courseRepository.findByIdAndInstitutionId(id, institutionId).isPresent()
+                || courseAssignmentRepository.findByIdAndInstitutionId(id, institutionId).isPresent();
+        if (!exists) throw new ResourceNotFoundException("Course", id);
     }
 
     public CourseResponse toResponse(Course c) {

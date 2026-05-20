@@ -27,6 +27,7 @@ public class ProfileService {
     private final GuardianProfileRepository guardianProfileRepository;
     private final AdminProfileRepository adminProfileRepository;
 
+    @Transactional(readOnly = true)
     public UserResponse getProfile(Long userId) {
         User user = findUser(userId);
         return userService.toResponse(user);

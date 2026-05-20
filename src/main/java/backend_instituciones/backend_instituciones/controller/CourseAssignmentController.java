@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/course-assignments")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'DOCENTE', 'ESTUDIANTE','ADMINISTRACION')")
 public class CourseAssignmentController {
 
     private final CourseAssignmentService service;
@@ -24,10 +24,11 @@ public class CourseAssignmentController {
                                   @RequestParam(required = false) Long levelId,
                                   @RequestParam(required = false) Long gradeId,
                                   @RequestParam(required = false) Long sectionId,
+                                  @RequestParam(required = false) Long teacherId,
                                   @RequestParam(defaultValue = "0") int page,
                                   @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(service.list(TenantContext.getInstitutionId(), classroomId,
-                academicYear, levelId, gradeId, sectionId, page, size));
+                academicYear, levelId, gradeId, sectionId, teacherId, page, size));
     }
 
     @GetMapping("/classroom/{classroomId}")
@@ -40,21 +41,26 @@ public class CourseAssignmentController {
         return ResponseEntity.ok(service.get(id, TenantContext.getInstitutionId()));
     }
 
+    @GetMapping("/{id}/students")
+    public ResponseEntity<?> getStudents(@PathVariable Long id) {
+        return ResponseEntity.ok(service.getStudents(id, TenantContext.getInstitutionId()));
+    }
+
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> create(@Valid @RequestBody CourseAssignmentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody CourseAssignmentRequest request) {
         return ResponseEntity.ok(service.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id, TenantContext.getInstitutionId());
         return ResponseEntity.noContent().build();

@@ -15,6 +15,9 @@ public class CourseAssignmentResponse {
     private String status;
     private Long classroomId;
     private String classroomName;
+    private Long levelId;
+    private Long gradeId;
+    private Long sectionId;
     private String educationLevel;
     private String grade;
     private String section;

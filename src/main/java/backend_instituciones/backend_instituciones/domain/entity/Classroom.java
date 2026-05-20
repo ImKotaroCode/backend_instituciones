@@ -7,7 +7,11 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "classrooms")
+@Table(name = "classrooms",
+        indexes = {
+                @Index(name = "idx_classrooms_institution", columnList = "institution_id"),
+                @Index(name = "idx_classrooms_institution_year", columnList = "institution_id, academic_year_id")
+        })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Classroom {
 
@@ -27,7 +31,7 @@ public class Classroom {
     @Column(name = "section_id")
     private Long sectionId;
 
-    @Column(name = "academic_year", nullable = false, length = 10)
+    @Column(name = "academic_year", nullable = false, length = 100)
     private String academicYear;
 
     @Column(name = "academic_level_id")

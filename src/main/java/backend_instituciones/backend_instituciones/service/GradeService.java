@@ -7,8 +7,6 @@ import backend_instituciones.backend_instituciones.exception.ResourceNotFoundExc
 import backend_instituciones.backend_instituciones.messaging.RabbitMQProducer;
 import backend_instituciones.backend_instituciones.repository.GradeRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,18 +23,18 @@ public class GradeService {
     private final RabbitMQProducer producer;
     private final SimpMessagingTemplate messagingTemplate;
 
-    @Cacheable(value = "grades:student", key = "#studentId + '-' + #institutionId")
+    @Transactional(readOnly = true)
     public List<GradeResponse> getByStudent(Long studentId, Long institutionId) {
         return gradeRepository.findByStudentIdAndInstitutionId(studentId, institutionId)
                 .stream().map(this::toResponse).toList();
     }
 
+    @Transactional(readOnly = true)
     public List<GradeResponse> getByCourse(Long courseId, Long institutionId) {
         return gradeRepository.findByCourseIdAndInstitutionId(courseId, institutionId)
                 .stream().map(this::toResponse).toList();
     }
 
-    @CacheEvict(value = "grades:student", key = "#request.studentId + '-' + #institutionId")
     @Transactional
     public GradeResponse create(Long institutionId, Long createdBy, GradeRequest request) {
         Grade grade = Grade.builder()
@@ -66,7 +64,6 @@ public class GradeService {
         return toResponse(saved);
     }
 
-    @CacheEvict(value = "grades:student", allEntries = true)
     @Transactional
     public GradeResponse update(Long id, Long institutionId, Long updatedBy, GradeRequest request) {
         Grade grade = findOrThrow(id, institutionId);
@@ -93,6 +90,7 @@ public class GradeService {
         gradeRepository.delete(findOrThrow(id, institutionId));
     }
 
+    @Transactional(readOnly = true)
     public List<GradeResponse> getReport(Long studentId, Long institutionId) {
         return gradeRepository.findByStudentIdAndInstitutionId(studentId, institutionId)
                 .stream().map(this::toResponse).toList();

@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +22,7 @@ public class OnboardingService {
 
     private final UserRepository userRepository;
     private final AdminProfileRepository adminProfileRepository;
+    private final InstitutionConfigRepository institutionConfigRepository;
     private final SupabaseAdminService supabaseAdminService;
     private final SaaSCoreService saaSCoreService;
 
@@ -81,6 +83,17 @@ public class OnboardingService {
 
         user = userRepository.save(user);
         adminProfileRepository.save(AdminProfile.builder().userId(user.getId()).build());
+
+        // Create default InstitutionConfig with institution name (idempotent)
+        if (!institutionConfigRepository.findByInstitutionId(institutionId).isPresent()) {
+            institutionConfigRepository.save(InstitutionConfig.builder()
+                    .institutionId(institutionId)
+                    .name(institutionName)
+                    .primaryColor("#1e293b")
+                    .secondaryColor("#0ea5e9")
+                    .fontFamily("Inter")
+                    .build());
+        }
 
         log.info("Onboarding: local user created — id={}, institutionId={}", user.getId(), institutionId);
 

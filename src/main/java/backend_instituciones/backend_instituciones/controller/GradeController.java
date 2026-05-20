@@ -20,13 +20,13 @@ public class GradeController {
     private final GradeService gradeService;
 
     @GetMapping("/course/{courseId}")
-    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE','ADMINISTRACION')")
     public ResponseEntity<?> getByCourse(@PathVariable Long courseId) {
         return ResponseEntity.ok(gradeService.getByCourse(courseId, TenantContext.getInstitutionId()));
     }
 
     @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE','ESTUDIANTE','PADRE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE','ESTUDIANTE','PADRE','ADMINISTRACION')")
     public ResponseEntity<?> getByStudent(@PathVariable Long studentId) {
         return ResponseEntity.ok(gradeService.getByStudent(studentId, TenantContext.getInstitutionId()));
     }
@@ -53,7 +53,7 @@ public class GradeController {
     }
 
     @GetMapping("/report/{studentId}")
-    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE','ESTUDIANTE','PADRE')")
+    @PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','DOCENTE','ESTUDIANTE','PADRE','ADMINISTRACION')")
     public ResponseEntity<?> report(@PathVariable Long studentId) {
         return ResponseEntity.ok(gradeService.getReport(studentId, TenantContext.getInstitutionId()));
     }

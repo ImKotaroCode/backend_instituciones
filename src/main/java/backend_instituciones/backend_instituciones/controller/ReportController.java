@@ -12,7 +12,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/reports")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN','DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN','DIRECTOR','ADMINISTRACION')")
 public class ReportController {
 
     private final ReportService reportService;

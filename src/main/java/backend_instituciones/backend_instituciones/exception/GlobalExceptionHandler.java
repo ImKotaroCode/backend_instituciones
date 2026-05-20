@@ -1,13 +1,16 @@
 package backend_instituciones.backend_instituciones.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -32,6 +35,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex, HttpServletRequest req) {
         return build("FORBIDDEN", "Access denied", null, HttpStatus.FORBIDDEN, req.getRequestURI());
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public void handleAsyncTimeout(AsyncRequestTimeoutException ex, HttpServletResponse res) {
+        // SSE/async connections time out normally — ignore, response already committed
+        if (!res.isCommitted()) {
+            res.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+        }
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex, HttpServletRequest req) {
+        return build("METHOD_NOT_ALLOWED", ex.getMessage(), null, HttpStatus.METHOD_NOT_ALLOWED, req.getRequestURI());
     }
 
     @ExceptionHandler(Exception.class)

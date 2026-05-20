@@ -18,4 +18,7 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     List<Classroom> findByInstitutionId(Long institutionId);
     Optional<Classroom> findByInstitutionIdAndAcademicYearIdAndAcademicLevelIdAndAcademicGradeIdAndAcademicSectionId(
             Long institutionId, Long academicYearId, Long academicLevelId, Long academicGradeId, Long academicSectionId);
+
+    List<Classroom> findByInstitutionIdAndAcademicLevelIdAndAcademicGradeIdAndAcademicSectionId(
+            Long institutionId, Long academicLevelId, Long academicGradeId, Long academicSectionId);
 }

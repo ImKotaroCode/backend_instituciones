@@ -10,9 +10,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"email", "institution_id"})
-})
+@Table(name = "users",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"email", "institution_id"})
+        },
+        indexes = {
+                @Index(name = "idx_users_institution_role", columnList = "institution_id, role"),
+                @Index(name = "idx_users_institution_active", columnList = "institution_id, is_active")
+        })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class User {
 

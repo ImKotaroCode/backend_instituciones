@@ -22,6 +22,7 @@ public class AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
 
+    @Transactional(readOnly = true)
     public List<AttendanceResponse> getByCourseAndDate(Long courseId, LocalDate date) {
         return attendanceRepository.findByCourseIdAndDate(courseId, date)
                 .stream().map(this::toResponse).toList();
@@ -54,6 +55,7 @@ public class AttendanceService {
         return toResponse(attendanceRepository.save(attendance));
     }
 
+    @Transactional(readOnly = true)
     @Cacheable(value = "attendance:summary", key = "#studentId + '-' + #institutionId")
     public Map<String, Long> getSummary(Long studentId, Long institutionId) {
         return Map.of(

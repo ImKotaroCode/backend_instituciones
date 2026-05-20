@@ -8,9 +8,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "student_enrollments", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"student_id", "academic_year_id"})
-})
+@Table(name = "student_enrollments",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"student_id", "academic_year_id"})
+        },
+        indexes = {
+                @Index(name = "idx_se_institution", columnList = "institution_id"),
+                @Index(name = "idx_se_institution_year", columnList = "institution_id, academic_year_id"),
+                @Index(name = "idx_se_classroom", columnList = "classroom_id")
+        })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class StudentEnrollment {
 

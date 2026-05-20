@@ -1,9 +1,11 @@
 package backend_instituciones.backend_instituciones.domain.entity;
 
+import backend_instituciones.backend_instituciones.domain.converter.JsonMapConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.Map;
 
 @Entity
 @Table(name = "admin_profiles")
@@ -22,4 +24,8 @@ public class AdminProfile {
 
     @Column(name = "position", length = 100)
     private String position;
+
+    @Convert(converter = JsonMapConverter.class)
+    @Column(name = "admin_permissions", columnDefinition = "text")
+    private Map<String, Map<String, Boolean>> adminPermissions;
 }

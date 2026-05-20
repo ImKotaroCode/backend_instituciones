@@ -15,7 +15,7 @@ import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR')")
+@PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR','ADMINISTRACION')")
 public class EnrollmentController {
 
     private final EnrollmentService service;
@@ -32,20 +32,20 @@ public class EnrollmentController {
     }
 
     @PostMapping("/api/v1/enrollments")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> create(@Valid @RequestBody EnrollmentRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(service.create(TenantContext.getInstitutionId(), request));
     }
 
     @PutMapping("/api/v1/enrollments/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> update(@PathVariable Long id, @Valid @RequestBody EnrollmentRequest request) {
         return ResponseEntity.ok(service.update(id, TenantContext.getInstitutionId(), request));
     }
 
     @DeleteMapping("/api/v1/enrollments/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id, TenantContext.getInstitutionId());
         return ResponseEntity.noContent().build();
@@ -57,14 +57,14 @@ public class EnrollmentController {
     }
 
     @PostMapping("/api/v1/students/{studentId}/academic-status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'DOCENTE')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DIRECTOR', 'DOCENTE','ADMINISTRACION')")
     public ResponseEntity<?> setStatus(@PathVariable Long studentId,
                                        @Valid @RequestBody AcademicStatusRequest request) {
         return ResponseEntity.ok(service.setAcademicStatus(studentId, TenantContext.getInstitutionId(), request));
     }
 
     @PatchMapping("/api/v1/students/{studentId}/promote")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> promote(@PathVariable Long studentId,
                                      @RequestBody Map<String, Object> body) {
         Long yearId = Long.valueOf(body.get("academicYearId").toString());
@@ -73,7 +73,7 @@ public class EnrollmentController {
     }
 
     @PatchMapping("/api/v1/students/{studentId}/repeat")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> repeat(@PathVariable Long studentId,
                                     @RequestBody Map<String, Object> body) {
         Long yearId = Long.valueOf(body.get("academicYearId").toString());
@@ -82,7 +82,7 @@ public class EnrollmentController {
     }
 
     @PatchMapping("/api/v1/students/{studentId}/withdraw")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> withdraw(@PathVariable Long studentId,
                                       @RequestBody Map<String, Object> body) {
         Long yearId = Long.valueOf(body.get("academicYearId").toString());
@@ -91,7 +91,7 @@ public class EnrollmentController {
     }
 
     @PatchMapping("/api/v1/students/{studentId}/transfer")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> transfer(@PathVariable Long studentId,
                                       @RequestBody Map<String, Object> body) {
         Long yearId = Long.valueOf(body.get("academicYearId").toString());
@@ -105,7 +105,7 @@ public class EnrollmentController {
     }
 
     @PostMapping("/api/v1/academic-years/{id}/promotion-execute")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'ADMINISTRACION')")
     public ResponseEntity<?> promotionExecute(@PathVariable Long id) {
         return ResponseEntity.ok(service.promotionExecute(id, TenantContext.getInstitutionId()));
     }

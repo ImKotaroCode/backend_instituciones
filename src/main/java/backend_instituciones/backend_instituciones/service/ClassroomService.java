@@ -42,6 +42,7 @@ public class ClassroomService {
     private final UserRepository userRepository;
     private final UserService userService;
 
+    @Transactional(readOnly = true)
     public PageResponse<ClassroomResponse> list(Long institutionId, String academicYear, int page, int size) {
         var pageable = PageRequest.of(page, size, Sort.by("name").ascending());
         var resultPage = (academicYear != null)
@@ -50,6 +51,7 @@ public class ClassroomService {
         return PageResponse.from(resultPage.map(c -> toResponse(c, institutionId)));
     }
 
+    @Transactional(readOnly = true)
     public ClassroomResponse get(Long id, Long institutionId) {
         Classroom c = findOrThrow(id, institutionId);
         return toResponse(c, institutionId);
@@ -146,7 +148,7 @@ public class ClassroomService {
             yearName = academicYearRepository.findById(c.getAcademicYearId())
                     .map(AcademicYear::getName).orElse(null);
         }
-        long studentCount = classroomStudentRepository.findByClassroomId(c.getId()).size();
+        long studentCount = classroomStudentRepository.countByClassroomId(c.getId());
         return ClassroomResponse.builder()
                 .id(c.getId())
                 .institutionId(c.getInstitutionId())

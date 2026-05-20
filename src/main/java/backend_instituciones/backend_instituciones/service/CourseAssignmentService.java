@@ -15,7 +15,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -29,19 +31,23 @@ public class CourseAssignmentService {
     private final AcademicYearRepository academicYearRepository;
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
+    private final ClassroomStudentRepository classroomStudentRepository;
+    private final StudentSectionAssignmentRepository studentSectionAssignmentRepository;
+    private final SectionScheduleSlotRepository slotRepository;
 
     public PageResponse<CourseAssignmentResponse> list(Long institutionId, Long classroomId,
                                                         String academicYear, Long levelId, Long gradeId, Long sectionId,
+                                                        Long teacherId,
                                                         int page, int size) {
         var pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
 
-        if (classroomId != null) {
-            List<CourseAssignment> filtered = assignmentRepository.findByClassroomIdAndInstitutionId(classroomId, institutionId);
-            List<CourseAssignmentResponse> mapped = filtered.stream().map(a -> toResponse(a, institutionId)).toList();
-            return PageResponse.from(new PageImpl<>(mapped, pageable, filtered.size()));
-        }
+        List<CourseAssignment> assignments;
 
-        if (academicYear != null || levelId != null || gradeId != null || sectionId != null) {
+        if (teacherId != null) {
+            assignments = assignmentRepository.findByTeacherIdAndInstitutionId(teacherId, institutionId);
+        } else if (classroomId != null) {
+            assignments = assignmentRepository.findByClassroomIdAndInstitutionId(classroomId, institutionId);
+        } else if (academicYear != null || levelId != null || gradeId != null || sectionId != null) {
             List<Classroom> classrooms = classroomRepository.findByInstitutionId(institutionId);
             List<Long> matchingIds = classrooms.stream()
                     .filter(c -> academicYear == null || academicYear.equals(c.getAcademicYear()))
@@ -50,26 +56,64 @@ public class CourseAssignmentService {
                     .filter(c -> sectionId == null || sectionId.equals(c.getAcademicSectionId()))
                     .map(Classroom::getId)
                     .toList();
-            List<CourseAssignment> filtered = matchingIds.isEmpty()
+            assignments = matchingIds.isEmpty()
                     ? List.of()
                     : assignmentRepository.findByClassroomIdInAndInstitutionId(matchingIds, institutionId);
-            List<CourseAssignmentResponse> mapped = filtered.stream().map(a -> toResponse(a, institutionId)).toList();
-            return PageResponse.from(new PageImpl<>(mapped, pageable, filtered.size()));
+        } else {
+            var pageResult = assignmentRepository.findByInstitutionId(institutionId, pageable);
+            List<CourseAssignmentResponse> mapped = toBatchResponses(pageResult.getContent());
+            return PageResponse.from(new PageImpl<>(mapped, pageable, pageResult.getTotalElements()));
         }
 
-        return PageResponse.from(assignmentRepository.findByInstitutionId(institutionId, pageable)
-                .map(a -> toResponse(a, institutionId)));
+        List<CourseAssignmentResponse> mapped = toBatchResponses(assignments);
+        return PageResponse.from(new PageImpl<>(mapped, pageable, assignments.size()));
     }
 
     public List<CourseAssignmentResponse> listByClassroom(Long classroomId, Long institutionId) {
-        return assignmentRepository.findByClassroomIdAndInstitutionId(classroomId, institutionId)
-                .stream().map(a -> toResponse(a, institutionId)).toList();
+        List<CourseAssignment> assignments = assignmentRepository.findByClassroomIdAndInstitutionId(classroomId, institutionId);
+        return toBatchResponses(assignments);
     }
 
     public CourseAssignmentResponse get(Long id, Long institutionId) {
         CourseAssignment a = assignmentRepository.findByIdAndInstitutionId(id, institutionId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseAssignment", id));
-        return toResponse(a, institutionId);
+        return toBatchResponses(List.of(a)).get(0);
+    }
+
+    public List<Map<String, Object>> getStudents(Long assignmentId, Long institutionId) {
+        CourseAssignment assignment = assignmentRepository.findByIdAndInstitutionId(assignmentId, institutionId)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseAssignment", assignmentId));
+
+        // Classroom holds level/grade/section ids — use StudentSectionAssignment as source of truth
+        Classroom classroom = classroomRepository.findById(assignment.getClassroomId())
+                .orElseThrow(() -> new ResourceNotFoundException("Classroom", assignment.getClassroomId()));
+
+        List<StudentSectionAssignment> sectionAssignments =
+                studentSectionAssignmentRepository.findByInstitutionIdAndLevelIdAndGradeIdAndSectionId(
+                        institutionId,
+                        classroom.getAcademicLevelId(),
+                        classroom.getAcademicGradeId(),
+                        classroom.getAcademicSectionId());
+
+        if (sectionAssignments.isEmpty()) return List.of();
+
+        Set<Long> studentIds = sectionAssignments.stream()
+                .map(StudentSectionAssignment::getStudentId)
+                .collect(Collectors.toSet());
+
+        Map<Long, User> userMap = userRepository.findAllById(studentIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+
+        return sectionAssignments.stream().map((StudentSectionAssignment sa) -> {
+            User u = userMap.get(sa.getStudentId());
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("studentId", sa.getStudentId());
+            result.put("name", u != null ? u.getName() : null);
+            result.put("documentNumber", u != null ? u.getDocumentNumber() : null);
+            result.put("email", u != null ? u.getEmail() : null);
+            result.put("assignedAt", sa.getCreatedAt());
+            return result;
+        }).toList();
     }
 
     @Transactional
@@ -91,37 +135,54 @@ public class CourseAssignmentService {
         Course course = courseRepository.findByIdAndInstitutionId(request.getCourseCatalogId(), institutionId)
                 .orElseThrow(() -> new BusinessException("Course not found", HttpStatus.NOT_FOUND, "NOT_FOUND"));
 
-        userRepository.findById(request.getTeacherId())
-                .filter(u -> u.getInstitutionId().equals(institutionId))
-                .orElseThrow(() -> new BusinessException("Teacher not found", HttpStatus.NOT_FOUND, "NOT_FOUND"));
-
         if (assignmentRepository.existsByClassroomIdAndCourseId(classroom.getId(), course.getId())) {
             throw new BusinessException("Course already assigned to this classroom", HttpStatus.CONFLICT, "ALREADY_ASSIGNED");
         }
 
         String code = generateCode(level, grade, section, course.getName(), year.getName());
+        String displayName = classroom.getDisplayName() != null ? classroom.getDisplayName() : classroom.getName();
+
+        User teacher = userRepository.findById(request.getTeacherId())
+                .filter(u -> u.getInstitutionId().equals(institutionId))
+                .orElseThrow(() -> new BusinessException("Teacher not found", HttpStatus.NOT_FOUND, "NOT_FOUND"));
 
         CourseAssignment assignment = CourseAssignment.builder()
                 .institutionId(institutionId)
                 .classroomId(classroom.getId())
                 .courseId(course.getId())
+                .courseName(course.getName())
+                .classroomName(displayName)
+                .academicYear(year.getName())
+                .levelId(level.getId())
+                .gradeName(grade.getName())
+                .gradeId(grade.getId())
+                .sectionName(section.getName())
+                .sectionId(section.getId())
+                .levelName(level.getName())
                 .teacherId(request.getTeacherId())
+                .teacherName(teacher.getName())
                 .generatedCode(code)
                 .status("ACTIVE")
                 .build();
 
-        return toResponse(assignmentRepository.save(assignment), institutionId);
+        return toBatchResponses(List.of(assignmentRepository.save(assignment))).get(0);
     }
 
     @Transactional
     public CourseAssignmentResponse update(Long id, Long institutionId, CourseAssignmentRequest request) {
         CourseAssignment assignment = assignmentRepository.findByIdAndInstitutionId(id, institutionId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseAssignment", id));
-        userRepository.findById(request.getTeacherId())
+        User teacher = userRepository.findById(request.getTeacherId())
                 .filter(u -> u.getInstitutionId().equals(institutionId))
                 .orElseThrow(() -> new BusinessException("Teacher not found", HttpStatus.NOT_FOUND, "NOT_FOUND"));
         assignment.setTeacherId(request.getTeacherId());
-        return toResponse(assignmentRepository.save(assignment), institutionId);
+        assignment.setTeacherName(teacher.getName());
+        CourseAssignment saved = assignmentRepository.save(assignment);
+
+        // Sync schedule slots — slots store teacherId independently, must stay in sync
+        slotRepository.updateTeacherIdByCourseId(saved.getId(), request.getTeacherId());
+
+        return toBatchResponses(List.of(saved)).get(0);
     }
 
     @Transactional
@@ -129,6 +190,105 @@ public class CourseAssignmentService {
         CourseAssignment a = assignmentRepository.findByIdAndInstitutionId(id, institutionId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseAssignment", id));
         assignmentRepository.delete(a);
+    }
+
+    // ── batch response builder (1 query per entity type, not per row) ──────────
+
+    public List<CourseAssignmentResponse> toBatchResponsesPublic(List<CourseAssignment> assignments) {
+        return toBatchResponses(assignments);
+    }
+
+    private List<CourseAssignmentResponse> toBatchResponses(List<CourseAssignment> assignments) {
+        if (assignments.isEmpty()) return List.of();
+
+        // Denormalized fields stored on entity — no extra queries needed.
+        // Fallback: for legacy rows created before denormalization, fetch classroom + lookup names.
+        Set<Long> legacyIds = assignments.stream()
+                .filter(a -> a.getLevelName() == null && a.getClassroomId() != null)
+                .map(CourseAssignment::getClassroomId)
+                .collect(Collectors.toSet());
+
+        Map<Long, Classroom> classroomFallback = legacyIds.isEmpty()
+                ? Map.of()
+                : classroomRepository.findAllById(legacyIds).stream()
+                        .collect(Collectors.toMap(Classroom::getId, Function.identity()));
+
+        // Resolve names for legacy rows only (one-time cost, disappears after all rows backfilled)
+        Set<Long> fallbackLevelIds = classroomFallback.values().stream()
+                .map(Classroom::getAcademicLevelId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> fallbackGradeIds = classroomFallback.values().stream()
+                .map(Classroom::getAcademicGradeId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> fallbackSectionIds = classroomFallback.values().stream()
+                .map(Classroom::getAcademicSectionId).filter(Objects::nonNull).collect(Collectors.toSet());
+
+        Map<Long, String> fallbackLevelNames = fallbackLevelIds.isEmpty() ? Map.of()
+                : levelRepository.findAllById(fallbackLevelIds).stream()
+                        .collect(Collectors.toMap(AcademicLevel::getId, AcademicLevel::getName));
+        Map<Long, String> fallbackGradeNames = fallbackGradeIds.isEmpty() ? Map.of()
+                : gradeRepository.findAllById(fallbackGradeIds).stream()
+                        .collect(Collectors.toMap(AcademicGrade::getId, AcademicGrade::getName));
+        Map<Long, String> fallbackSectionNames = fallbackSectionIds.isEmpty() ? Map.of()
+                : sectionRepository.findAllById(fallbackSectionIds).stream()
+                        .collect(Collectors.toMap(AcademicSection::getId, AcademicSection::getName));
+
+        // Teacher name fallback for legacy rows
+        Set<Long> legacyTeacherIds = assignments.stream()
+                .filter(a -> a.getTeacherName() == null)
+                .map(CourseAssignment::getTeacherId)
+                .collect(Collectors.toSet());
+        Map<Long, String> fallbackTeacherNames = legacyTeacherIds.isEmpty() ? Map.of()
+                : userRepository.findAllById(legacyTeacherIds).stream()
+                        .collect(Collectors.toMap(User::getId, User::getName));
+
+        return assignments.stream().map(a -> {
+            // Prefer denormalized fields; fall back to live-lookup for legacy rows
+            String classroomName = a.getClassroomName();
+            String levelName = a.getLevelName();
+            String gradeName = a.getGradeName();
+            String sectionName = a.getSectionName();
+            String academicYear = a.getAcademicYear();
+            Long levelId = a.getLevelId();
+            Long gradeId = a.getGradeId();
+            Long sectionId = a.getSectionId();
+            String teacherName = a.getTeacherName() != null
+                    ? a.getTeacherName()
+                    : fallbackTeacherNames.get(a.getTeacherId());
+
+            if (levelName == null && classroomFallback.containsKey(a.getClassroomId())) {
+                Classroom c = classroomFallback.get(a.getClassroomId());
+                if (classroomName == null)
+                    classroomName = c.getDisplayName() != null ? c.getDisplayName() : c.getName();
+                if (academicYear == null) academicYear = c.getAcademicYear();
+                levelId = c.getAcademicLevelId();
+                gradeId = c.getAcademicGradeId();
+                sectionId = c.getAcademicSectionId();
+                levelName = levelId != null ? fallbackLevelNames.get(levelId) : null;
+                gradeName = gradeId != null ? fallbackGradeNames.get(gradeId) : null;
+                sectionName = sectionId != null ? fallbackSectionNames.get(sectionId) : null;
+            }
+
+            return CourseAssignmentResponse.builder()
+                    .id(a.getId())
+                    .institutionId(a.getInstitutionId())
+                    .generatedCode(a.getGeneratedCode())
+                    .status(a.getStatus())
+                    .classroomId(a.getClassroomId())
+                    .classroomName(classroomName)
+                    .levelId(levelId)
+                    .gradeId(gradeId)
+                    .sectionId(sectionId)
+                    .educationLevel(levelName)
+                    .grade(gradeName)
+                    .section(sectionName)
+                    .academicYear(academicYear)
+                    .courseCatalogId(a.getCourseId())
+                    .courseName(a.getCourseName())
+                    .courseArea(null)
+                    .teacherUserId(a.getTeacherId())
+                    .teacherName(teacherName)
+                    .createdAt(a.getCreatedAt())
+                    .build();
+        }).toList();
     }
 
     private Classroom findOrCreateClassroom(Long institutionId, AcademicYear year,
@@ -166,51 +326,5 @@ public class CourseAssignmentService {
         int suffix = 2;
         while (assignmentRepository.existsByGeneratedCode(base + "-" + suffix)) suffix++;
         return base + "-" + suffix;
-    }
-
-    CourseAssignmentResponse toResponse(CourseAssignment a, Long institutionId) {
-        Classroom classroom = classroomRepository.findById(a.getClassroomId()).orElse(null);
-        String classroomName = classroom != null ? classroom.getDisplayName() : null;
-        if (classroomName == null && classroom != null) classroomName = classroom.getName();
-
-        String educationLevel = null, gradeName = null, sectionName = null, academicYear = null;
-
-        if (classroom != null) {
-            academicYear = classroom.getAcademicYear();
-            if (classroom.getAcademicLevelId() != null) {
-                educationLevel = levelRepository.findById(classroom.getAcademicLevelId())
-                        .map(AcademicLevel::getName).orElse(null);
-            }
-            if (classroom.getAcademicGradeId() != null) {
-                gradeName = gradeRepository.findById(classroom.getAcademicGradeId())
-                        .map(AcademicGrade::getName).orElse(null);
-            }
-            if (classroom.getAcademicSectionId() != null) {
-                sectionName = sectionRepository.findById(classroom.getAcademicSectionId())
-                        .map(AcademicSection::getName).orElse(null);
-            }
-        }
-
-        Course course = courseRepository.findById(a.getCourseId()).orElse(null);
-        String teacherName = userRepository.findById(a.getTeacherId()).map(User::getName).orElse(null);
-
-        return CourseAssignmentResponse.builder()
-                .id(a.getId())
-                .institutionId(a.getInstitutionId())
-                .generatedCode(a.getGeneratedCode())
-                .status(a.getStatus())
-                .classroomId(a.getClassroomId())
-                .classroomName(classroomName)
-                .educationLevel(educationLevel)
-                .grade(gradeName)
-                .section(sectionName)
-                .academicYear(academicYear)
-                .courseCatalogId(a.getCourseId())
-                .courseName(course != null ? course.getName() : null)
-                .courseArea(course != null ? course.getArea() : null)
-                .teacherUserId(a.getTeacherId())
-                .teacherName(teacherName)
-                .createdAt(a.getCreatedAt())
-                .build();
     }
 }

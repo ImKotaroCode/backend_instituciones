@@ -101,6 +101,10 @@ public class SseService {
             jwtDecoder.decode(token);
             return true;
         } catch (JwtException e) {
+            log.warn("SSE token validation failed: {}", e.getMessage());
+            return false;
+        } catch (Exception e) {
+            log.warn("SSE token validation unexpected error: {}", e.getMessage());
             return false;
         }
     }
